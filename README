@@ -1,0 +1,6 @@
+CSE 576 - Natural Language Processing
+Homework 3
+
+1. Error rate: 7.244%
+2. Lines 99 and 100 contain the predicted set of states and the true set of states. You can uncomment them to view it in console. Line 104 contains a blocking call so that each line can be viewed before progressing to the next line.
+3. The program expects entrain.txt and entest.txt to be in the same location. If they are not, the location of these files can be changed on lines 133 and 134.
