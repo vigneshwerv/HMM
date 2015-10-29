@@ -1,12 +1,37 @@
 from __future__ import division
 
+class GramDict(object):
+
+	def __init__(self):
+		self.count = dict()
+		self.dictionary = dict()
+
+	def add(self, key, value):
+		if key not in self.dictionary:
+			self.count[key] = 0
+			self.dictionary[key] = dict()
+		if value not in self.dictionary[key]:
+			self.dictionary[key][value] = 0
+		self.dictionary[key][value] += 1
+		self.count[key] += 1
+
+	def normalize(self):
+		for key_dict in self.dictionary.iterkeys():
+			for value_dict in self.dictionary[key_dict].iterkeys():
+				self.dictionary[key_dict][value_dict] /= self.count[key_dict]
+
+	def get(self, key, value):
+		if key in self.dictionary and value in self.dictionary[key]:
+			return self.dictionary[key][value]
+		return False
+
 class HMM(object):
 
 	def __init__(self):
 		self.states = set()
-		self.stateDictionary = dict()
-		self.emissionDictionary = dict()
-		self.initProbability = {'count': 0}
+		self.stateDictionary = GramDict()
+		self.emissionDictionary = GramDict()
+		self.initDictionary = GramDict()
 		pass
 
 	def trainHMM(self, filename):
@@ -25,56 +50,30 @@ class HMM(object):
 				posTag = posTag.replace('\n', '')
 				word = word.lower()
 
-				if posTag not in self.emissionDictionary:
-					self.emissionDictionary[posTag] = {'count': 0, 'emis': dict()}
-					self.stateDictionary[posTag] = {'count': 0, 'next': dict()}
-				if word not in self.emissionDictionary[posTag]['emis']:
-					self.emissionDictionary[posTag]['emis'][word] = 0
-
-				self.emissionDictionary[posTag]['count'] += 1
-				self.emissionDictionary[posTag]['emis'][word] += 1
+				self.emissionDictionary.add(posTag, word)
 
 				if prevPosTag == None:
-					if posTag not in self.initProbability:
-						self.initProbability[posTag] = 0
-					self.initProbability[posTag] += 1
-					self.initProbability['count'] += 1
+					self.initDictionary.add('init', posTag)
 					prevPosTag = posTag
 					continue
 
-				self.stateDictionary[prevPosTag]['count'] += 1
-				if posTag not in self.stateDictionary[prevPosTag]['next']:
-					self.stateDictionary[prevPosTag]['next'][posTag] = 0
-				self.stateDictionary[prevPosTag]['next'][posTag] += 1
+				self.stateDictionary.add(prevPosTag, posTag)
 				prevPosTag = posTag
 
-		for posTag in self.stateDictionary.iterkeys():
-			self.states.update(posTag)
-			count = self.stateDictionary[posTag]['count']
-			for nextPosTags in self.stateDictionary[posTag]['next'].iterkeys():
-				self.stateDictionary[posTag]['next'][nextPosTags] /= count
-			count = self.emissionDictionary[posTag]['count']
-			for emission in self.emissionDictionary[posTag]['emis'].iterkeys():
-				self.emissionDictionary[posTag]['emis'][emission] /= count
+		self.emissionDictionary.normalize()
+		self.stateDictionary.normalize()
+		self.initDictionary.normalize()
 
-		count = self.initProbability['count']
-		for posTag in self.initProbability.iterkeys():
-			if posTag == 'count':
-				continue
-			self.initProbability[posTag] /= count
+		self.states.update(self.stateDictionary.dictionary.keys())
 
 	def __initial_probability__(self, state):
-		return self.initProbability[state] if state in self.initProbability else 0
+		return self.initDictionary.get('init', state) or 0
 
 	def __emission_probability__(self, state, observation):
-		if observation not in self.emissionDictionary[state]['emis']:
-			return 0.0000015
-		return self.emissionDictionary[state]['emis'][observation]
+		return self.emissionDictionary.get(state, observation) or 0.0000015
 
 	def __transition_probability__(self, prevState, nextState):
-		if nextState not in self.stateDictionary[prevState]['next']:
-			return 0.0000015
-		return self.stateDictionary[prevState]['next'][nextState]
+		return self.stateDictionary.get(prevState, nextState) or 0.0000015
 
 	def testHMM(self, filename):
 		with open(filename, "r") as test_file:
@@ -106,7 +105,7 @@ class HMM(object):
 	def __predict_tagsets__(self, observations):
 		viterbi = [{}]
 		path = {}
-	    
+
 		for s0 in self.states:
 			viterbi[0][s0] = self.__initial_probability__(s0) * self.__emission_probability__(s0, observations[0])
 			path[s0] = [s0]
