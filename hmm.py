@@ -1,12 +1,13 @@
 from __future__ import division
+from collections import deque
 
-class GramDict(object):
+class BiGramDict(object):
 
 	def __init__(self):
 		self.count = dict()
 		self.dictionary = dict()
 
-	def add(self, key, value):
+	def put(self, key, value):
 		if key not in self.dictionary:
 			self.count[key] = 0
 			self.dictionary[key] = dict()
@@ -25,46 +26,70 @@ class GramDict(object):
 			return self.dictionary[key][value]
 		return False
 
+class TriGramDict(object):
+
+	def __init__(self):
+		# Don't need a count. BiGramDict on each gram will maintain a tab
+		self.dictionary = dict()
+
+	def put(self, first_gram, second_gram, third_gram):
+		if first_gram not in self.dictionary:
+			self.dictionary[first_gram] = BiGramDict()
+		self.dictionary[first_gram].put(second_gram, third_gram)
+
+	def normalize(self):
+		for gram in self.dictionary.iterkeys():
+			self.dictionary[gram].normalize()
+
+	def get(self, first_gram, second_gram, third_gram):
+		if first_gram not in self.dictionary:
+			return False
+		return self.dictionary[first_gram].get(second_gram, third_gram)
+
 class HMM(object):
 
 	def __init__(self):
 		self.states = set()
-		self.stateDictionary = GramDict()
-		self.emissionDictionary = GramDict()
-		self.initDictionary = GramDict()
+		self.trigramDictionary = TriGramDict()
+		self.bigramStateDictionary = BiGramDict()
+		self.emissionDictionary = BiGramDict()
+		self.initDictionary = BiGramDict()
 		pass
 
 	def trainHMM(self, filename):
 
 		prevPosTag = None
+		prevPosTags = [None] * 2
 		with open(filename, "r") as train_file:
 
 			for line in train_file:
 
 				line = line.strip()
 				if line == "###/###":
-					prevPosTag = None
+					prevPosTags[1] = None
 					continue
 
 				word, posTag = line.split('/')
 				posTag = posTag.replace('\n', '')
-				word = word.lower()
 
-				self.emissionDictionary.add(posTag, word)
+				self.emissionDictionary.put(posTag, word)
 
-				if prevPosTag == None:
-					self.initDictionary.add('init', posTag)
-					prevPosTag = posTag
+				previous_BiGram_nexists = prevPosTags[1] == None
+				if previous_BiGram_nexists:
+					self.initDictionary.put('init', posTag)
+					prevPosTags[1] = posTag
 					continue
 
-				self.stateDictionary.add(prevPosTag, posTag)
-				prevPosTag = posTag
+				self.bigramStateDictionary.put(prevPosTags[1], posTag)
+
+				prevPosTags[0], prevPosTags[1] = prevPosTags[1], posTag
+				self.trigramDictionary.put(prevPosTags[0], prevPosTags[1], posTag)
 
 		self.emissionDictionary.normalize()
-		self.stateDictionary.normalize()
+		self.bigramStateDictionary.normalize()
 		self.initDictionary.normalize()
 
-		self.states.update(self.stateDictionary.dictionary.keys())
+		self.states.update(self.bigramStateDictionary.dictionary.keys())
 
 	def __initial_probability__(self, state):
 		return self.initDictionary.get('init', state) or 0
@@ -73,7 +98,7 @@ class HMM(object):
 		return self.emissionDictionary.get(state, observation) or 0.0000015
 
 	def __transition_probability__(self, prevState, nextState):
-		return self.stateDictionary.get(prevState, nextState) or 0.0000015
+		return self.bigramStateDictionary.get(prevState, nextState) or 0.0000015
 
 	def testHMM(self, filename):
 		with open(filename, "r") as test_file:
@@ -86,7 +111,7 @@ class HMM(object):
 				if line != '###/###':
 					word, tag = line.split('/')
 					true_states.append(tag)
-					obs.append(word.lower())
+					obs.append(word)
 					continue
 				if len(true_states) == 0:
 					continue
